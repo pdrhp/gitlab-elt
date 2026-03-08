@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gitlab-elt-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gitlab_elt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gitlab_elt_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-gitlab_elt}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gitlab_elt}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

@@ -1,0 +1,60 @@
+groups:
+  - name: gitlab-elt-worker
+    rules:
+      - alert: GitLabWorkerDown
+        expr: absent_over_time(gitlab_elt_last_successful_sync_timestamp[5m])
+        for: 5m
+        labels:
+          severity: critical
+          team: data-platform
+          service: gitlab-elt-worker
+          runbook: docs/OBSERVABILITY.md#gitlabworkerdown
+        annotations:
+          summary: GitLab ELT worker target disappeared from Prometheus.
+          description: >-
+            gitlab-elt-worker has not reported metrics for 5 minutes.
+            Check the worker deployment, Kubernetes pod status, or VM process
+            and restart if necessary.
+
+      - alert: SyncStalled
+        expr: time() - max by (job) (gitlab_elt_last_successful_sync_timestamp{stage="transform"}) > 1800
+        for: 10m
+        labels:
+          severity: warning
+          team: data-platform
+          service: gitlab-elt-worker
+          runbook: docs/OBSERVABILITY.md#syncstalled
+        annotations:
+          summary: Transform stage has not completed successfully in 30 minutes.
+          description: >-
+            The last successful transform sync finished over 30 minutes ago.
+            Inspect worker logs for stuck batches, DB locks, or API throttling.
+
+      - alert: SyncErrorBurst
+        expr: increase(gitlab_elt_transform_results_total{status="error"}[15m]) > 10
+        for: 5m
+        labels:
+          severity: critical
+          team: data-platform
+          service: gitlab-elt-worker
+          runbook: docs/OBSERVABILITY.md#syncerrorburst
+        annotations:
+          summary: Transform stage produced more than 10 errors in 15 minutes.
+          description: >-
+            Investigate recent sync runs for failed transformations.
+            Use the projects_monitored gauge and SetProjectsMonitored logs to
+            scope the incident.
+
+      - alert: UnknownLabelsDetected
+        expr: increase(gitlab_elt_transform_results_total{status="unknown_label"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+          team: data-platform
+          service: gitlab-elt-worker
+          runbook: docs/OBSERVABILITY.md#unknownlabelsdetected
+        annotations:
+          summary: Unknown GitLab labels detected during transformation.
+          description: >-
+            At least one transform batch emitted status=unknown_label within the
+            last hour. Review state mappings and update the catalog accordingly.
