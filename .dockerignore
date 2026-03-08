@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts (we'll rebuild in container)
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+tests/
+*.test
+
+# Docker files (not needed inside container)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Database migrations and queries (handled separately in production)
+db/migrations/
+db/query/
+db/seeds/
+
+# Misc
+*.log
+*.tmp
+.cache/
+node_modules/
