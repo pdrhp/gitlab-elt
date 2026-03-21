@@ -42,6 +42,55 @@ Tabelas de configuração para o State Mapper.
 
 > **Nota:** Views analíticas serão criadas pelo sistema downstream, não por este worker.
 
+#### Optimization Layer - 000011-000015
+Tabelas de configuração para o State Mapper.
+
+| Migration | Tabela | Descrição |
+|-----------|--------|-----------|
+| 000011 | `dead_letter` | Log de eventos falhos (retry queue) |
+| 000012 | `raw_issues` | Cache de issues brutos (JSONB) |
+| 000013 | (views) | Views da Golden Engineering |
+| 000014 | (indexes) | Índices para otimização de ghost-work queries |
+| 000015 | `mv_ghost_work_issues` | Materialized view opcional para workloads pesados (fallback se Task 4 falhar) |
+
+**Migration 000014 - Ghost Work Query Optimization**
+
+Adiciona 5 índices seletivos para otimizar consultas de ghost-work:
+- `idx_issues_assignees_gin`: GIN index para filtro por assignees (JSONB array)
+- `idx_issues_metadata_labels_gin`: GIN index para filtro por metadata_labels (JSONB array)
+- `idx_issues_ghost_work_completed`: Índice parcial para issues com `current_canonical_state = 'DONE'` (proxy para ghost-work: issues finalizadas que possivelmente pularam IN_PROGRESS)
+- `idx_issue_events_ghost_transitions`: Índice parcial para transições ghost (BACKLOG, DONE, QA_REVIEW)
+- `idx_issue_events_project_ghost`: Índice parcial para eventos ghost por projeto
+
+**Nota:** O índice `idx_issues_ghost_work_completed` usa `current_canonical_state = 'DONE'` ao invés de `skipped_in_progress_flag = true` porque este último é uma coluna computada na view `vw_issue_lifecycle_metrics`, não uma coluna física na tabela `issues`.
+
+**Migration 000015 - Optional Materialized View for Ghost Work**
+
+Cria uma materialized view `mv_ghost_work_issues` como fallback para workloads pesados onde a Task 4 (índices seletivos) não foi suficiente para atingir o threshold de performance (p95 > 2s).
+
+**Conteúdo da MV:**
+- Pre-computa o join entre `vw_issue_lifecycle_metrics` e `vw_issue_state_transitions`
+- Filtra apenas issues com `skipped_in_progress_flag = true`
+- Foca em transições BACKLOG → DONE ou BACKLOG → QA_REVIEW
+- Inclui 3 índices para otimização: project_id, final_done_at, skipped_in_progress_flag
+
+**Refresh Strategy:**
+```sql
+-- Manual refresh (runbook)
+REFRESH MATERIALIZED VIEW mv_ghost_work_issues;
+
+-- Future: concurrent refresh (requires unique index)
+-- REFRESH MATERIALIZED VIEW CONCURRENTLY mv_ghost_work_issues;
+```
+
+**Caveat: Por que NÃO usamos `CONCURRENTLY`**
+
+Esta migration intencionalmente **NÃO** usa `CREATE INDEX CONCURRENTLY` porque:
+1. O runner de migrations local (`make migrate-up`) executa dentro de transação
+2. `CONCURRENTLY` não é permitido dentro de transações no PostgreSQL
+3. Para ambiente local/dev, o downtime é aceitável e preferível à complexidade
+4. Em produção, use um processo de deploy que suporte migrations não-transacionais ou execute manualmente com `CONCURRENTLY`
+
 ## Comandos Úteis
 
 ### Aplicar todas as migrations
