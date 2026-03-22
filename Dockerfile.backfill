@@ -1,0 +1,30 @@
+FROM golang:1.25.7-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates tzdata
+RUN adduser -D -g '' appuser
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=amd64
+
+RUN go build -ldflags='-w -s' -a -installsuffix cgo -o bin/backfill cmd/backfill/main.go
+
+FROM scratch
+
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /app/bin/backfill /backfill
+
+USER appuser
+
+ENV PATH=/
+
+ENTRYPOINT ["/backfill"]

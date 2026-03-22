@@ -1,0 +1,60 @@
+name: Backfill Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: "Tag customizada para a imagem (opcional)"
+        required: false
+        type: string
+
+jobs:
+  docker-backfill:
+    name: Build e push Docker backfill
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validar configuracao Docker Hub
+        run: |
+          if [ -z "${{ vars.DOCKERHUB_BACKFILL_IMAGE }}" ]; then
+            echo "A variavel vars.DOCKERHUB_BACKFILL_IMAGE nao foi definida."
+            exit 1
+          fi
+
+      - name: Login Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Definir tags da imagem
+        id: tags
+        run: |
+          CUSTOM_TAG="${{ inputs.custom_tag }}"
+          if [ -z "$CUSTOM_TAG" ]; then
+            CUSTOM_TAG="manual-${GITHUB_RUN_NUMBER}"
+          fi
+
+          {
+            echo "tags<<EOF"
+            echo "${{ vars.DOCKERHUB_BACKFILL_IMAGE }}:latest"
+            echo "${{ vars.DOCKERHUB_BACKFILL_IMAGE }}:sha-${GITHUB_SHA}"
+            echo "${{ vars.DOCKERHUB_BACKFILL_IMAGE }}:${CUSTOM_TAG}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build e push da imagem backfill
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.backfill
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.tags.outputs.tags }}

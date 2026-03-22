@@ -2,6 +2,8 @@
 
 Este documento descreve o pipeline de CI/CD do projeto, como configurar o GitHub para publicar imagem no Docker Hub e como usar a imagem gerada.
 
+Para o fluxo de backfill efemero, veja tambem `docs/BACKFILL_DOCKER.md`.
+
 ## Fluxo do pipeline
 
 Workflow: `.github/workflows/ci-cd.yml`
@@ -12,6 +14,12 @@ Workflow: `.github/workflows/ci-cd.yml`
 - `push` para `main`
   - Executa `test` + `build`
   - Executa `docker` (buildx + login Docker Hub + build/push)
+
+Workflow manual de backfill: `.github/workflows/backfill-image.yml`
+
+- `workflow_dispatch`
+  - Builda `Dockerfile.backfill`
+  - Faz push da imagem de backfill no Docker Hub
 
 ## Publicacao da imagem Docker
 
