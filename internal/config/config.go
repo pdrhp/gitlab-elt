@@ -94,46 +94,54 @@ func Load() (*Config, error) {
 
 	// Parse optional GITLAB_PROJECT_IDS
 	var projectIDs []int
-	if projectIDsStr := os.Getenv("GITLAB_PROJECT_IDS"); projectIDsStr != "" {
+	projectIDsStr, err := resolveEnvValue("GITLAB_PROJECT_IDS")
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve GITLAB_PROJECT_IDS: %w", err)
+	}
+	if projectIDsStr != "" {
 		projectIDs, err = parseIntList(projectIDsStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid GITLAB_PROJECT_IDS: %w", err)
 		}
 	}
 
-	pgHost := requireEnv("POSTGRES_HOST")
-	if pgHost == "" {
-		return nil, fmt.Errorf("POSTGRES_HOST is required")
+	pgHost, err := requireEnvStrict("POSTGRES_HOST")
+	if err != nil {
+		return nil, err
 	}
 
-	pgUser := requireEnv("POSTGRES_USER")
-	if pgUser == "" {
-		return nil, fmt.Errorf("POSTGRES_USER is required")
+	pgUser, err := requireEnvStrict("POSTGRES_USER")
+	if err != nil {
+		return nil, err
 	}
 
-	pgPassword := requireEnv("POSTGRES_PASSWORD")
-	if pgPassword == "" {
-		return nil, fmt.Errorf("POSTGRES_PASSWORD is required")
+	pgPassword, err := requireEnvStrict("POSTGRES_PASSWORD")
+	if err != nil {
+		return nil, err
 	}
 
-	pgDB := requireEnv("POSTGRES_DB")
-	if pgDB == "" {
-		return nil, fmt.Errorf("POSTGRES_DB is required")
+	pgDB, err := requireEnvStrict("POSTGRES_DB")
+	if err != nil {
+		return nil, err
 	}
 
-	gitlabBaseURL := requireEnv("GITLAB_BASE_URL")
-	if gitlabBaseURL == "" {
-		return nil, fmt.Errorf("GITLAB_BASE_URL is required")
+	gitlabBaseURL, err := requireEnvStrict("GITLAB_BASE_URL")
+	if err != nil {
+		return nil, err
 	}
 
-	gitlabToken := requireEnv("GITLAB_TOKEN")
-	if gitlabToken == "" {
-		return nil, fmt.Errorf("GITLAB_TOKEN is required")
+	gitlabToken, err := requireEnvStrict("GITLAB_TOKEN")
+	if err != nil {
+		return nil, err
 	}
 
 	// Parse optional GITLAB_GROUP_IDS
 	var groupIDs []int
-	if groupIDsStr := os.Getenv("GITLAB_GROUP_IDS"); groupIDsStr != "" {
+	groupIDsStr, err := resolveEnvValue("GITLAB_GROUP_IDS")
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve GITLAB_GROUP_IDS: %w", err)
+	}
+	if groupIDsStr != "" {
 		groupIDs, err = parseIntList(groupIDsStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid GITLAB_GROUP_IDS: %w", err)
@@ -157,8 +165,12 @@ func Load() (*Config, error) {
 	}
 
 	healthPort := 8080
-	if v := os.Getenv("HEALTH_PORT"); v != "" {
-		healthPort, err = strconv.Atoi(v)
+	healthPortStr, err := resolveEnvValue("HEALTH_PORT")
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve HEALTH_PORT: %w", err)
+	}
+	if healthPortStr != "" {
+		healthPort, err = strconv.Atoi(healthPortStr)
 		if err != nil {
 			return nil, fmt.Errorf("HEALTH_PORT must be an integer: %w", err)
 		}
@@ -216,31 +228,65 @@ func Load() (*Config, error) {
 	}, nil
 }
 
+func resolveEnvValue(key string) (string, error) {
+	if val := os.Getenv(key); val != "" {
+		return val, nil
+	}
+
+	fileKey := key + "_FILE"
+	filePath := strings.TrimSpace(os.Getenv(fileKey))
+	if filePath == "" {
+		return "", nil
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed reading %s (%s): %w", fileKey, filePath, err)
+	}
+
+	return strings.TrimSpace(string(content)), nil
+}
+
 func requireEnv(key string) string {
-	return os.Getenv(key)
+	val, _ := resolveEnvValue(key)
+	return val
+}
+
+func requireEnvStrict(key string) (string, error) {
+	val, err := resolveEnvValue(key)
+	if err != nil {
+		return "", err
+	}
+	if val == "" {
+		return "", fmt.Errorf("%s is required", key)
+	}
+	return val, nil
 }
 
 func requireEnvInt(key string) (int, error) {
-	val := os.Getenv(key)
+	val, err := resolveEnvValue(key)
+	if err != nil {
+		return 0, err
+	}
 	if val == "" {
 		return 0, fmt.Errorf("%s is required", key)
 	}
-	n, err := strconv.Atoi(val)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an integer: %w", key, err)
-	}
-	return n, nil
+	return strconv.Atoi(val)
 }
 
 func envOrDefault(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+	val, err := resolveEnvValue(key)
+	if err != nil || val == "" {
+		return defaultVal
 	}
-	return defaultVal
+	return val
 }
 
 func envOrDefaultInt(key string, defaultVal int) (int, error) {
-	val := os.Getenv(key)
+	val, err := resolveEnvValue(key)
+	if err != nil {
+		return 0, err
+	}
 	if val == "" {
 		return defaultVal, nil
 	}

@@ -430,3 +430,97 @@ func TestPostgresConfig_DSN(t *testing.T) {
 		t.Errorf("expected DSN %s, got %s", expected, pg.DSN())
 	}
 }
+
+func writeTempFile(t *testing.T, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "cfg-*")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	if _, err := f.WriteString(content); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("failed to close temp file: %v", err)
+	}
+	return f.Name()
+}
+
+func TestLoad_UsesFileFallbackForRequiredSecrets(t *testing.T) {
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_DB", "test")
+	t.Setenv("GITLAB_BASE_URL", "https://gitlab.example.com")
+	t.Setenv("GITLAB_PROJECT_IDS", "1")
+
+	userFile := writeTempFile(t, "db-user-from-file\n")
+	passFile := writeTempFile(t, "db-pass-from-file\n")
+	tokenFile := writeTempFile(t, "gitlab-token-from-file\n")
+	t.Setenv("POSTGRES_USER_FILE", userFile)
+	t.Setenv("POSTGRES_PASSWORD_FILE", passFile)
+	t.Setenv("GITLAB_TOKEN_FILE", tokenFile)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if cfg.Postgres.User != "db-user-from-file" || cfg.Postgres.Password != "db-pass-from-file" || cfg.Gitlab.Token != "gitlab-token-from-file" {
+		t.Fatalf("expected values loaded from *_FILE, got %+v", cfg)
+	}
+}
+
+func TestLoad_DirectEnvHasPriorityOverFileFallback(t *testing.T) {
+	setRequiredEnvVars(t)
+	tokenFile := writeTempFile(t, "token-from-file")
+	t.Setenv("GITLAB_TOKEN", "token-from-env")
+	t.Setenv("GITLAB_TOKEN_FILE", tokenFile)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if cfg.Gitlab.Token != "token-from-env" {
+		t.Fatalf("expected env priority, got %q", cfg.Gitlab.Token)
+	}
+}
+
+func TestLoad_FileFallbackReadError(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("GITLAB_TOKEN", "")
+	t.Setenv("GITLAB_TOKEN_FILE", "/path/that/does/not/exist")
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("expected error when *_FILE cannot be read")
+	}
+}
+
+func TestLoad_ProjectIDsFromFileFallback(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("GITLAB_PROJECT_IDS", "")
+	file := writeTempFile(t, "101,202,303")
+	t.Setenv("GITLAB_PROJECT_IDS_FILE", file)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(cfg.Gitlab.ProjectIDs) != 3 || cfg.Gitlab.ProjectIDs[0] != 101 {
+		t.Fatalf("unexpected ids: %v", cfg.Gitlab.ProjectIDs)
+	}
+}
+
+func TestLoad_HealthPortFromFileFallback(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("HEALTH_PORT", "")
+	t.Setenv("HEALTH_PORT_FILE", writeTempFile(t, "9090"))
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if cfg.Worker.HealthPort != 9090 {
+		t.Fatalf("expected 9090, got %d", cfg.Worker.HealthPort)
+	}
+}

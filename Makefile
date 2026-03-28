@@ -9,6 +9,7 @@ endif
 GO ?= go
 DATABASE_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
 HEALTH_PORT ?= 8080
+PG_CLI_IMAGE ?= postgres:16-alpine
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -49,7 +50,11 @@ sqlc-generate: ## Generate Go code from SQL queries
 setup: docker-up migrate-up sqlc-generate build ## Full local setup: start DB, run migrations, generate code, build
 
 seed: ## Apply seed data (state and metadata mappings)
-	docker compose exec -T postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < db/seeds/state_mappings.sql
+	@command -v psql >/dev/null || (echo "psql não encontrado. Instale o cliente PostgreSQL."; exit 1)
+	PGPASSWORD='$(POSTGRES_PASSWORD)' \
+	psql -h $(POSTGRES_HOST) -p $(POSTGRES_PORT) -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
+		-v ON_ERROR_STOP=1 \
+		-f db/seeds/state_mappings.sql
 
 health: ## Check worker health endpoint
 	@curl -sf http://localhost:$(HEALTH_PORT)/health | python3 -m json.tool || echo "Health check failed (is the worker running?)"
