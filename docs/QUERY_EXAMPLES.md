@@ -32,6 +32,48 @@ ORDER BY ie.event_timestamp;
 
 ## Analytics Queries
 
+### State semantics and noise
+
+`vw_issue_lifecycle_metrics` exposes two state perspectives, both based on canonical timeline state:
+
+- `operational_current_canonical_state`: current snapshot from `issues.current_canonical_state`
+- `analytical_current_canonical_state`: state derived from canonical transitions timeline
+- `current_canonical_state`: compatibility alias for `operational_current_canonical_state`
+
+`is_noise` is treated as a separate process-quality signal and does not filter canonical state progression for lifecycle calculations.
+
+```sql
+SELECT
+    issue_id,
+    issue_iid,
+    operational_current_canonical_state,
+    analytical_current_canonical_state,
+    current_canonical_state
+FROM vw_issue_lifecycle_metrics
+WHERE project_id = (SELECT id FROM projects WHERE path = 'my-group/my-project')
+ORDER BY issue_iid DESC
+LIMIT 20;
+```
+
+### Project noise metrics (per project)
+
+`vw_project_engineering_metrics` includes:
+
+- `noise_events_count`: number of events flagged with `is_noise = TRUE`
+- `noise_rate_pct`: percentage of noise events over total events in the project
+
+```sql
+SELECT
+    project_path,
+    backlog_issues,
+    in_progress_issues,
+    canceled_issues,
+    noise_events_count,
+    noise_rate_pct
+FROM vw_project_engineering_metrics
+ORDER BY noise_rate_pct DESC NULLS LAST, project_path;
+```
+
 ### Lead time (BACKLOG → DONE)
 
 ```sql
