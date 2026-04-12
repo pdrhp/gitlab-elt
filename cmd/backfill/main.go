@@ -58,10 +58,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Use conservative rate limit for backfill (lower than normal to be safe)
+	// Use higher rate limit for backfill (faster than normal worker to reduce backfill time)
+	// Default backfill cap is 15 req/s (can be overridden with GITLAB_RATE_LIMIT env var)
 	rateLimit := cfg.Gitlab.RateLimit
-	if rateLimit > 10 {
-		rateLimit = 10 // Cap at 10 req/s for backfill
+	if rateLimit > 15 {
+		rateLimit = 15 // Cap at 15 req/s for backfill (increased from 10 for faster backfills)
 	}
 
 	tracer := noop.NewTracerProvider().Tracer("github.com/pdrhp/gitlab-elt/backfill")

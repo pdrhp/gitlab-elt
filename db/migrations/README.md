@@ -53,6 +53,15 @@ Tabelas de configuração para o State Mapper.
 | 000014 | (indexes) | Índices para otimização de ghost-work queries |
 | 000015 | `mv_ghost_work_issues` | Materialized view opcional para workloads pesados (fallback se Task 4 falhar) |
 
+#### Individual Performance Layer - 000017
+
+| Migration | Tabela/View | Descrição |
+|-----------|-------------|-----------|
+| 000017 | `vw_assignee_cycle_time` | Tempo de cycle time por assignee durante períodos de responsabilidade |
+| 000017 | `vw_individual_performance_metrics` | Métricas agregadas de performance individual |
+
+**Nota:** Esta migration implementa métricas JUSTAS de performance individual, onde cada assignee recebe crédito APENAS pelo tempo que realmente teve a issue. Substitui a abordagem anterior de `primary_author` que atribuía todo o tempo a uma única pessoa.
+
 **Migration 000014 - Ghost Work Query Optimization**
 
 Adiciona 5 índices seletivos para otimizar consultas de ghost-work:

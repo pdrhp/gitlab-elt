@@ -171,5 +171,28 @@ Use views in `vw_*` namespace for data quality monitoring:
 
 ## Version
 
-- Contract Version: 1.0
-- Last Updated: 2025-03-04
+- Contract Version: 3.0
+- Last Updated: 2026-04-11
+- Migration: 000017_assignee_cycle_time
+
+### What's New in v3.0
+
+**Fair Performance Metrics:** Each assignee gets credit ONLY for their actual assignment time (vs old `primary_author` approach which attributed ALL time to one person).
+
+**New Views:**
+- `vw_assignee_cycle_time`: Per-assignee time breakdown during their assignment periods
+- `vw_individual_performance_metrics`: Aggregated performance metrics per assignee
+
+**Key Concepts:**
+| Concept | Description |
+|---------|-------------|
+| **Assignee** | Who is formally responsible (`issues.assignees`) |
+| **Assignment Period** | Time between `assigned_at` and `unassigned_at` |
+| **Active Work** | Time in IN_PROGRESS + QA_REVIEW during assignment |
+| **Wait Time** | Time in BACKLOG + BLOCKED during assignment |
+
+**Migration:** See `docs/MIGRATION_GUIDE_V3.md` for detailed migration instructions.
+
+### Legacy (Pre-v3.0)
+
+The `primary_author` column in `vw_issue_lifecycle_metrics` (from older versions) is **DEPRECATED** for performance calculations. Use `vw_assignee_cycle_time` instead for fair metrics.

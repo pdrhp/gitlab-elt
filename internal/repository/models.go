@@ -80,6 +80,22 @@ type MetadataMapping struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type MvGhostWorkIssue struct {
+	IssueID               int32              `json:"issue_id"`
+	ProjectID             int32              `json:"project_id"`
+	ProjectPath           string             `json:"project_path"`
+	IssueIid              int32              `json:"issue_iid"`
+	GitlabIssueID         int32              `json:"gitlab_issue_id"`
+	IssueTitle            pgtype.Text        `json:"issue_title"`
+	Assignees             []byte             `json:"assignees"`
+	FinalDoneAt           interface{}        `json:"final_done_at"`
+	SkippedInProgressFlag interface{}        `json:"skipped_in_progress_flag"`
+	FromState             string             `json:"from_state"`
+	ToState               interface{}        `json:"to_state"`
+	TransitionTime        pgtype.Timestamptz `json:"transition_time"`
+	DurationHours         pgtype.Numeric     `json:"duration_hours"`
+}
+
 // Silver Layer: Projetos normalizados e estruturados, prontos para análise.
 type Project struct {
 	ID           int32              `json:"id"`
@@ -162,45 +178,81 @@ type UnknownLabelsLog struct {
 	LastSeenAt      pgtype.Timestamptz `json:"last_seen_at"`
 }
 
+// Tempo de cycle time atribuído a CADA assignee durante seus períodos de responsabilidade. Separa active work (IN_PROGRESS + QA_REVIEW) de wait time (BACKLOG, BLOCKED).
+type VwAssigneeCycleTime struct {
+	IssueID               int32          `json:"issue_id"`
+	IssueIid              int32          `json:"issue_iid"`
+	ProjectID             int32          `json:"project_id"`
+	AssigneeUsername      interface{}    `json:"assignee_username"`
+	ActiveCycleHours      pgtype.Numeric `json:"active_cycle_hours"`
+	InProgressHours       pgtype.Numeric `json:"in_progress_hours"`
+	QaReviewHours         pgtype.Numeric `json:"qa_review_hours"`
+	BlockedHours          pgtype.Numeric `json:"blocked_hours"`
+	BacklogHours          pgtype.Numeric `json:"backlog_hours"`
+	TotalHoursAsAssignee  pgtype.Numeric `json:"total_hours_as_assignee"`
+	ContributedActiveWork bool           `json:"contributed_active_work"`
+}
+
+// Métricas de performance individual por assignee: tempo ativo (trabalho real) vs tempo total (incluindo espera). Inclui percentis para identificar outliers.
+type VwIndividualPerformanceMetric struct {
+	AssigneeUsername       interface{}    `json:"assignee_username"`
+	ProjectID              int32          `json:"project_id"`
+	IssuesAssigned         int64          `json:"issues_assigned"`
+	IssuesContributed      int64          `json:"issues_contributed"`
+	TotalActiveCycleHours  pgtype.Numeric `json:"total_active_cycle_hours"`
+	AvgActiveCyclePerIssue pgtype.Numeric `json:"avg_active_cycle_per_issue"`
+	TotalDevHours          pgtype.Numeric `json:"total_dev_hours"`
+	TotalQaHours           pgtype.Numeric `json:"total_qa_hours"`
+	TotalBlockedHours      pgtype.Numeric `json:"total_blocked_hours"`
+	TotalBacklogHours      pgtype.Numeric `json:"total_backlog_hours"`
+	ActiveWorkPct          pgtype.Numeric `json:"active_work_pct"`
+	TotalHoursAsAssignee   pgtype.Numeric `json:"total_hours_as_assignee"`
+	HighCycleTimeIssues    int64          `json:"high_cycle_time_issues"`
+	P50ActiveCycleHours    pgtype.Numeric `json:"p50_active_cycle_hours"`
+	P95ActiveCycleHours    pgtype.Numeric `json:"p95_active_cycle_hours"`
+}
+
 // Metricas por issue: lead time, cycle time, blocked time, rework, ghost work e timestamps de ciclo.
 type VwIssueLifecycleMetric struct {
-	IssueID                     int32              `json:"issue_id"`
-	ProjectID                   int32              `json:"project_id"`
-	ProjectPath                 string             `json:"project_path"`
-	IssueIid                    int32              `json:"issue_iid"`
-	GitlabIssueID               int32              `json:"gitlab_issue_id"`
-	IssueTitle                  pgtype.Text        `json:"issue_title"`
-	CurrentCanonicalState       string             `json:"current_canonical_state"`
-	CachedCurrentCanonicalState pgtype.Text        `json:"cached_current_canonical_state"`
-	MetadataLabels              []byte             `json:"metadata_labels"`
-	Assignees                   []byte             `json:"assignees"`
-	GitlabCreatedAt             pgtype.Timestamptz `json:"gitlab_created_at"`
-	LifecycleStartAt            interface{}        `json:"lifecycle_start_at"`
-	LifecycleStartSource        string             `json:"lifecycle_start_source"`
-	FirstBacklogAt              interface{}        `json:"first_backlog_at"`
-	FirstInProgressAt           interface{}        `json:"first_in_progress_at"`
-	FirstQaReviewAt             interface{}        `json:"first_qa_review_at"`
-	FirstBlockedAt              interface{}        `json:"first_blocked_at"`
-	FirstTouchAt                interface{}        `json:"first_touch_at"`
-	FirstDoneAt                 interface{}        `json:"first_done_at"`
-	FinalDoneAt                 interface{}        `json:"final_done_at"`
-	IsCompleted                 pgtype.Bool        `json:"is_completed"`
-	SkippedInProgressFlag       pgtype.Bool        `json:"skipped_in_progress_flag"`
-	InProgressEntryCount        int64              `json:"in_progress_entry_count"`
-	QaReviewEntryCount          int64              `json:"qa_review_entry_count"`
-	BlockedEntryCount           int64              `json:"blocked_entry_count"`
-	DoneEntryCount              int64              `json:"done_entry_count"`
-	QaToDevReturnCount          int64              `json:"qa_to_dev_return_count"`
-	ReopenedAfterDoneCount      int64              `json:"reopened_after_done_count"`
-	MaxCycleCountRecorded       interface{}        `json:"max_cycle_count_recorded"`
-	InProgressTimeHours         pgtype.Numeric     `json:"in_progress_time_hours"`
-	QaReviewTimeHours           pgtype.Numeric     `json:"qa_review_time_hours"`
-	CycleTimeHours              pgtype.Numeric     `json:"cycle_time_hours"`
-	BlockedTimeHours            pgtype.Numeric     `json:"blocked_time_hours"`
-	ElapsedLeadTimeHours        pgtype.Numeric     `json:"elapsed_lead_time_hours"`
-	LeadTimeHours               interface{}        `json:"lead_time_hours"`
-	BacklogWaitHours            interface{}        `json:"backlog_wait_hours"`
-	FlowEfficiencyPct           interface{}        `json:"flow_efficiency_pct"`
+	IssueID                          int32              `json:"issue_id"`
+	ProjectID                        int32              `json:"project_id"`
+	ProjectPath                      string             `json:"project_path"`
+	IssueIid                         int32              `json:"issue_iid"`
+	GitlabIssueID                    int32              `json:"gitlab_issue_id"`
+	IssueTitle                       pgtype.Text        `json:"issue_title"`
+	AnalyticalCurrentCanonicalState  string             `json:"analytical_current_canonical_state"`
+	OperationalCurrentCanonicalState pgtype.Text        `json:"operational_current_canonical_state"`
+	CurrentCanonicalState            pgtype.Text        `json:"current_canonical_state"`
+	CachedCurrentCanonicalState      pgtype.Text        `json:"cached_current_canonical_state"`
+	MetadataLabels                   []byte             `json:"metadata_labels"`
+	Assignees                        []byte             `json:"assignees"`
+	GitlabCreatedAt                  pgtype.Timestamptz `json:"gitlab_created_at"`
+	LifecycleStartAt                 interface{}        `json:"lifecycle_start_at"`
+	LifecycleStartSource             string             `json:"lifecycle_start_source"`
+	FirstBacklogAt                   interface{}        `json:"first_backlog_at"`
+	FirstInProgressAt                interface{}        `json:"first_in_progress_at"`
+	FirstQaReviewAt                  interface{}        `json:"first_qa_review_at"`
+	FirstBlockedAt                   interface{}        `json:"first_blocked_at"`
+	FirstTouchAt                     interface{}        `json:"first_touch_at"`
+	FirstDoneAt                      interface{}        `json:"first_done_at"`
+	FinalDoneAt                      interface{}        `json:"final_done_at"`
+	IsCompleted                      interface{}        `json:"is_completed"`
+	SkippedInProgressFlag            interface{}        `json:"skipped_in_progress_flag"`
+	InProgressEntryCount             int64              `json:"in_progress_entry_count"`
+	QaReviewEntryCount               int64              `json:"qa_review_entry_count"`
+	BlockedEntryCount                int64              `json:"blocked_entry_count"`
+	DoneEntryCount                   int64              `json:"done_entry_count"`
+	QaToDevReturnCount               int64              `json:"qa_to_dev_return_count"`
+	ReopenedAfterDoneCount           int64              `json:"reopened_after_done_count"`
+	MaxCycleCountRecorded            interface{}        `json:"max_cycle_count_recorded"`
+	InProgressTimeHours              pgtype.Numeric     `json:"in_progress_time_hours"`
+	QaReviewTimeHours                pgtype.Numeric     `json:"qa_review_time_hours"`
+	CycleTimeHours                   pgtype.Numeric     `json:"cycle_time_hours"`
+	BlockedTimeHours                 pgtype.Numeric     `json:"blocked_time_hours"`
+	ElapsedLeadTimeHours             pgtype.Numeric     `json:"elapsed_lead_time_hours"`
+	LeadTimeHours                    interface{}        `json:"lead_time_hours"`
+	BacklogWaitHours                 interface{}        `json:"backlog_wait_hours"`
+	FlowEfficiencyPct                interface{}        `json:"flow_efficiency_pct"`
 }
 
 // Intervalos por estado canonico com entered_at, exited_at e duracao em horas.
@@ -229,7 +281,7 @@ type VwIssueStateInterval struct {
 	CycleCount             pgtype.Int4        `json:"cycle_count"`
 }
 
-// Timeline limpo por issue, removendo ruido e estados canonicos consecutivos duplicados.
+// Timeline por issue com todos os eventos canonicos (noise nao filtra estado), removendo apenas estados consecutivos duplicados.
 type VwIssueStateTransition struct {
 	IssueEventID             int64              `json:"issue_event_id"`
 	GitlabEventID            pgtype.Int8        `json:"gitlab_event_id"`
@@ -281,6 +333,8 @@ type VwProjectEngineeringMetric struct {
 	ReworkIssuePct           pgtype.Numeric `json:"rework_issue_pct"`
 	BlockedIssuesWithTime    int64          `json:"blocked_issues_with_time"`
 	BlockedIssuePct          pgtype.Numeric `json:"blocked_issue_pct"`
+	NoiseEventsCount         int64          `json:"noise_events_count"`
+	NoiseRatePct             pgtype.Numeric `json:"noise_rate_pct"`
 }
 
 // Catalogo de projetos para APIs e seletores, com volumetria de issues e ultimo sync consolidado.
