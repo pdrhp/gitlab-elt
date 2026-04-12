@@ -18,6 +18,18 @@ type Querier interface {
 	CountUnknownLabels(ctx context.Context) (int64, error)
 	CountUnprocessedRawEvents(ctx context.Context) (int64, error)
 	CountUnresolvedDLQ(ctx context.Context) (int64, error)
+	// Identify assignees spending too much time in BLOCKED state.
+	FindAssigneesWithHighBlockedTime(ctx context.Context, projectID int32) ([]FindAssigneesWithHighBlockedTimeRow, error)
+	// Get cycle time breakdown for each assignee on a specific issue.
+	GetAssigneeCycleTimeByIssue(ctx context.Context, issueID int32) ([]VwAssigneeCycleTime, error)
+	// Get all assignee cycle time metrics for a project.
+	GetAssigneeCycleTimeByProject(ctx context.Context, projectID int32) ([]GetAssigneeCycleTimeByProjectRow, error)
+	// Get distribution of active vs wait time for each assignee.
+	GetAssigneeWorkDistribution(ctx context.Context, projectID int32) ([]GetAssigneeWorkDistributionRow, error)
+	// Get top performers by active work percentage and volume.
+	GetHighPerformers(ctx context.Context, projectID int32) ([]GetHighPerformersRow, error)
+	// Get aggregated performance metrics for all assignees in a project.
+	GetIndividualPerformanceMetrics(ctx context.Context, projectID int32) ([]VwIndividualPerformanceMetric, error)
 	GetIssueByGitlabID(ctx context.Context, gitlabIssueID int32) (Issue, error)
 	GetIssueByID(ctx context.Context, id int32) (Issue, error)
 	GetIssueByProjectAndIID(ctx context.Context, arg GetIssueByProjectAndIIDParams) (Issue, error)
@@ -31,6 +43,8 @@ type Querier interface {
 	GetRawProject(ctx context.Context, id int32) (RawProject, error)
 	GetStateMappingByLabel(ctx context.Context, gitlabLabelName string) (StateMapping, error)
 	GetSyncState(ctx context.Context, projectID int32) (SyncState, error)
+	// Get user performance trends by month.
+	GetUserPerformanceOverTime(ctx context.Context, arg GetUserPerformanceOverTimeParams) ([]GetUserPerformanceOverTimeRow, error)
 	// Incrementa retry_count e atualiza last_retry_at.
 	IncrementDLQRetry(ctx context.Context, id int64) error
 	// db/query/dead_letter_queue.sql
